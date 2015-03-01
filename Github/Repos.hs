@@ -5,7 +5,8 @@
 module Github.Repos (
 
 -- * Querying repositories
- userRepos
+listRepos'
+,userRepos
 ,userRepos'
 ,userRepo
 ,userRepo'
@@ -60,6 +61,17 @@ data RepoPublicity =
   | Private -- ^ Only private repos.
   | Member  -- ^ Only repos to which the user is a member but not an owner.
  deriving (Show, Eq)
+
+-- | Retrieve all repos, passing a valid clientID/clientSecret pair and the id of the last
+-- last seen repository (from which this call will return repo data). The final parameter
+-- is optional and allows a maximum number of
+-- > listRepos "id"
+listRepos' :: String -> String -> String -> Maybe Integer -> IO (Either Error [Repo])
+listRepos' clientID clientSecret since iter = githubGetWithQueryStringLimitPagenate' Nothing ["repositories"]
+                                                (("since="++) since ++
+                                                "&client_id=" ++ clientID ++
+                                                "&client_secret=" ++ clientSecret)
+                                                iter
 
 -- | The repos for a user, by their login. Can be restricted to just repos they
 -- own, are a member of, or publicize. Private repos are currently not

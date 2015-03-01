@@ -32,9 +32,18 @@ githubGet' auth paths =
             (buildUrl paths)
             auth
             (Nothing :: Maybe Value)
+            Nothing
 
 githubGetWithQueryString :: (FromJSON b, Show b) => [String] -> String -> IO (Either Error b)
 githubGetWithQueryString = githubGetWithQueryString' Nothing
+
+githubGetWithQueryStringLimitPagenate' :: (FromJSON b, Show b) => Maybe GithubAuth -> [String] -> String -> Maybe Integer -> IO (Either Error b)
+githubGetWithQueryStringLimitPagenate' auth paths qs iter =
+  githubAPI (BS.pack "GET")
+            (buildUrl paths ++ "?" ++ qs)
+            auth
+            (Nothing :: Maybe Value)
+            iter
 
 githubGetWithQueryString' :: (FromJSON b, Show b) => Maybe GithubAuth -> [String] -> String -> IO (Either Error b)
 githubGetWithQueryString' auth paths qs =
@@ -42,6 +51,7 @@ githubGetWithQueryString' auth paths qs =
             (buildUrl paths ++ "?" ++ qs)
             auth
             (Nothing :: Maybe Value)
+            Nothing
 
 githubPost :: (ToJSON a, Show a, FromJSON b, Show b) => GithubAuth -> [String] -> a -> IO (Either Error b)
 githubPost auth paths body =
@@ -49,6 +59,7 @@ githubPost auth paths body =
             (buildUrl paths)
             (Just auth)
             (Just body)
+            Nothing
 
 githubPatch :: (ToJSON a, Show a, FromJSON b, Show b) => GithubAuth -> [String] -> a -> IO (Either Error b)
 githubPatch auth paths body =
@@ -56,25 +67,31 @@ githubPatch auth paths body =
             (buildUrl paths)
             (Just auth)
             (Just body)
+            Nothing
 
 buildUrl :: [String] -> String
 buildUrl paths = "https://api.github.com/" ++ intercalate "/" paths
 
 githubAPI :: (ToJSON a, Show a, FromJSON b, Show b) => BS.ByteString -> String
-          -> Maybe GithubAuth -> Maybe a -> IO (Either Error b)
-githubAPI apimethod url auth body = do
+          -> Maybe GithubAuth -> Maybe a -> Maybe Integer -> IO (Either Error b)
+githubAPI apimethod url auth body iter = do
   result <- doHttps apimethod url auth (encodeBody body)
-  case result of
-      Left e     -> return (Left (HTTPConnectionError e))
-      Right resp -> either Left (\x -> jsonResultToE (LBS.pack (show x))
-                                                   (fromJSON x))
-                          <$> handleBody resp
-
+  case (result, iter)  of
+      (Left e, _)     -> return (Left (HTTPConnectionError e))
+      (Right resp, Just i) -> either Left (\x -> jsonResultToE (LBS.pack (show x))
+                                                                       (fromJSON x))
+                                              <$> handleBody i resp
+      (Right resp, Nothing) -> either Left (\x -> jsonResultToE (LBS.pack (show x))
+                                                                        (fromJSON x))
+                                               <$> handleBody (-1)  resp -- negative ensures we won't terminate pagenate
   where
     encodeBody = Just . RequestBodyLBS . encode . toJSON
 
-    handleBody resp = either (return . Left) (handleJson resp)
-                             (parseJsonRaw (responseBody resp))
+    handleBody i resp
+        | i == 0 = return (parseJsonRaw (responseBody resp))
+        | otherwise =
+              either (return . Left) (handleJson i resp )
+                           (parseJsonRaw (responseBody resp))
 
     -- This is an "escaping" version of "for", which returns (Right esc) if
     -- the value 'v' is Nothing; otherwise, it extracts the value from the
@@ -83,7 +100,7 @@ githubAPI apimethod url auth body = do
          -> IO (Either Error b)
     forE = flip . maybe . return . Right
 
-    handleJson resp gotjson@(Array ary) =
+    handleJson i resp gotjson@(Array ary) =
         -- Determine whether the output was paginated, and if so, we must
         -- recurse to obtain the subsequent pages, and append those result
         -- bodies to the current one.  The aggregate will then be parsed.
@@ -91,11 +108,12 @@ githubAPI apimethod url auth body = do
             forE gotjson (getNextUrl (BS.unpack l)) $ \nu ->
                 either (return . Left . HTTPConnectionError)
                        (\nextResp -> do
-                             nextJson <- handleBody nextResp
+                             putStrLn "iter"
+                             nextJson <- handleBody (i - 1) nextResp
                              return $ (\(Array x) -> Array (ary <> x))
                                           <$> nextJson)
                        =<< doHttps apimethod nu auth Nothing
-    handleJson _ gotjson = return (Right gotjson)
+    handleJson _ _ gotjson = return (Right gotjson)
 
     getNextUrl l =
         if "rel=\"next\"" `isInfixOf` l
@@ -108,7 +126,7 @@ doHttps :: BS.ByteString
            -> [Char]
            -> Maybe GithubAuth
            -> Maybe RequestBody
-           -> IO (Either E.SomeException (Response LBS.ByteString))    
+           -> IO (Either E.SomeException (Response LBS.ByteString))
 doHttps reqMethod url auth body = do
   let reqBody = fromMaybe (RequestBodyBS $ BS.pack "") body
       reqHeaders = maybe [] getOAuth auth
