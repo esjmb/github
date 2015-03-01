@@ -64,8 +64,9 @@ data RepoPublicity =
 
 -- | Retrieve all repos, passing a valid clientID/clientSecret pair and the id of the last
 -- last seen repository (from which this call will return repo data). The final parameter
--- is optional and allows a maximum number of
--- > listRepos "id"
+-- is optional and allows a maximum number of pagenation recursions if multiple result pages are
+-- returned.
+-- > listRepos "token" "secret" "id" $ Just 5
 listRepos' :: String -> String -> String -> Maybe Integer -> IO (Either Error [Repo])
 listRepos' clientID clientSecret since iter = githubGetWithQueryStringLimitPagenate' Nothing ["repositories"]
                                                 (("since="++) since ++
