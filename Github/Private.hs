@@ -79,11 +79,11 @@ githubAPI apimethod url auth body iter = do
   case (result, iter)  of
       (Left e, _)     -> return (Left (HTTPConnectionError e))
       (Right resp, Just i) -> either Left (\x -> jsonResultToE (LBS.pack (show x))
-                                                                       (fromJSON x))
-                                              <$> handleBody i resp
+                                                                     (fromJSON x))
+                                            <$> handleBody i resp
       (Right resp, Nothing) -> either Left (\x -> jsonResultToE (LBS.pack (show x))
-                                                                        (fromJSON x))
-                                               <$> handleBody (-1)  resp -- negative ensures we won't terminate pagenate
+                                                                      (fromJSON x))
+                                             <$> handleBody (-1)  resp -- negative ensures we won't terminate pagenate
   where
     encodeBody = Just . RequestBodyLBS . encode . toJSON
 

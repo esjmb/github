@@ -40,39 +40,12 @@ listRepos'
 ,def
 ,Edit(..)
 
--- ** Delete
-,deleteRepo
-) where
-
-import Data.Default
-import Data.Aeson.Types
-import Github.Data
-import Github.Private
-import Network.HTTP.Conduit
-import Control.Applicative
-import qualified Control.Exception as E
-import Network.HTTP.Types
-
--- | Filter the list of the user's repos using any of these constructors.
-data RepoPublicity =
-    All     -- ^ All repos accessible to the user.
-  | Owner   -- ^ Only repos owned by the user.
-  | Public  -- ^ Only public repos.
-  | Private -- ^ Only private repos.
-  | Member  -- ^ Only repos to which the user is a member but not an owner.
- deriving (Show, Eq)
-
--- | Retrieve all repos, passing a valid clientID/clientSecret pair and the id of the last
--- last seen repository (from which this call will return repo data). The final parameter
--- is optional and allows a maximum number of pagenation recursions if multiple result pages are
--- returned.
--- > listRepos "token" "secret" "id" $ Just 5
-listRepos' :: String -> String -> String -> Maybe Integer -> IO (Either Error [Repo])
+-- ** DeletelistRepos' :: String -> String -> String -> Maybe Integer -> IO (Either Error [Repo])
 listRepos' clientID clientSecret since iter = githubGetWithQueryStringLimitPagenate' Nothing ["repositories"]
-                                              (("since="++) since ++
-                                              "&client_id=" ++ clientID ++
-                                              "&client_secret=" ++ clientSecret)
-                                              iter
+                                                (("since="++) since ++
+                                                "&client_id=" ++ clientID ++
+                                                "&client_secret=" ++ clientSecret)
+                                                iter
 
 -- | The repos for a user, by their login. Can be restricted to just repos they
 -- own, are a member of, or publicize. Private repos are currently not
